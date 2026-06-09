@@ -1,0 +1,13 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    API_V1_STR: str = "/api/v1"
+    PROJECT_NAME: str = "汽车重量构成分析系统"
+    SQLALCHEMY_DATABASE_URL: str = "sqlite:///./weight_analysis.db"
+
+    class Config:
+        case_sensitive = True
+
+
+settings = Settings()
