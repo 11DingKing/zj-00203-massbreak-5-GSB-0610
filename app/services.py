@@ -66,14 +66,48 @@ def get_vehicle_list_with_summary(
     return result
 
 
+def _pick_baseline_pair(
+    v1: models.Vehicle,
+    v2: models.Vehicle
+) -> Tuple[models.Vehicle, models.Vehicle, bool]:
+    """
+    根据两车的动力类型与整备质量，判定哪辆作为对比基准。
+    返回 (base_vehicle, compare_vehicle, base_is_vehicle1)。
+
+    规则：
+    1. 若两车动力类型不同且其中一辆为燃油版：以燃油版为基准（保留传统油电对比语义）。
+    2. 否则：以整备质量较轻的一辆为基准，使差异方向呈"增重"语义；
+       两车整备质量相同时保留传入顺序。
+    """
+    is_v1_fuel = v1.power_type == PowerType.FUEL
+    is_v2_fuel = v2.power_type == PowerType.FUEL
+
+    if is_v1_fuel and not is_v2_fuel:
+        return v1, v2, True
+    if is_v2_fuel and not is_v1_fuel:
+        return v2, v1, False
+
+    if v1.curb_weight <= v2.curb_weight:
+        return v1, v2, True
+    return v2, v1, False
+
+
 def _build_comparison_response(
-    base_vehicle: models.Vehicle,
-    compare_vehicle: models.Vehicle,
-    base_wc: models.WeightComponent,
-    compare_wc: models.WeightComponent
+    vehicle1: models.Vehicle,
+    vehicle2: models.Vehicle,
+    base_vehicle: models.Vehicle
 ) -> schemas.VehicleComparisonResponse:
-    vehicle1_item = create_comparison_item(base_vehicle, base_wc, base_vehicle, base_wc, True)
-    vehicle2_item = create_comparison_item(compare_vehicle, compare_wc, base_vehicle, base_wc, False)
+    base_is_vehicle1 = base_vehicle.id == vehicle1.id
+    base_wc = base_vehicle.weight_component
+    compare_vehicle = vehicle2 if base_is_vehicle1 else vehicle1
+    compare_wc = compare_vehicle.weight_component
+
+    vehicle1_item = create_comparison_item(
+        vehicle1, vehicle1.weight_component, base_vehicle, base_wc, base_is_vehicle1
+    )
+    vehicle2_item = create_comparison_item(
+        vehicle2, vehicle2.weight_component, base_vehicle, base_wc, not base_is_vehicle1
+    )
 
     weight_diff_summary = build_weight_diff_summary(base_wc, compare_wc)
     biggest_diff_item, biggest_diff_value = find_biggest_diff_item(base_wc, compare_wc)
@@ -87,7 +121,7 @@ def _build_comparison_response(
         biggest_diff_item=biggest_diff_item,
         biggest_diff_value=biggest_diff_value,
         comparison_type=comparison_type,
-        base_vehicle_is_vehicle1=True
+        base_vehicle_is_vehicle1=base_is_vehicle1
     )
 
 
@@ -109,10 +143,7 @@ def compare_fuel_ev_by_brand_model(
     fuel_vehicle = fuel_vehicles[0]
     ev_vehicle = ev_vehicles[0]
 
-    return _build_comparison_response(
-        fuel_vehicle, ev_vehicle,
-        fuel_vehicle.weight_component, ev_vehicle.weight_component
-    )
+    return _build_comparison_response(fuel_vehicle, ev_vehicle, fuel_vehicle)
 
 
 def compare_vehicles_by_ids(
@@ -128,10 +159,9 @@ def compare_vehicles_by_ids(
     if not vehicle1.weight_component or not vehicle2.weight_component:
         return None
 
-    return _build_comparison_response(
-        vehicle1, vehicle2,
-        vehicle1.weight_component, vehicle2.weight_component
-    )
+    base_vehicle, _, _ = _pick_baseline_pair(vehicle1, vehicle2)
+
+    return _build_comparison_response(vehicle1, vehicle2, base_vehicle)
 
 
 def get_category_statistics(db: Session) -> schemas.CategoryStatsResponse:
