@@ -31,7 +31,7 @@ def compare_by_brand_model(
 
 @router.get("/compare/ids", response_model=schemas.VehicleComparisonResponse, summary="按车辆ID对比两款车")
 def compare_by_ids(
-    vehicle_id_1: int = Query(..., description="第一款车ID（作为对比基准）"),
+    vehicle_id_1: int = Query(..., description="第一款车ID"),
     vehicle_id_2: int = Query(..., description="第二款车ID"),
     db: Session = Depends(get_db)
 ):
