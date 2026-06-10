@@ -168,14 +168,14 @@ def build_weight_diff_summary(
     compare_wc: models.WeightComponent
 ) -> Dict[str, float]:
     return {
-        "动力系统差": calc_component_diff(base_wc, compare_wc, "powertrain_weight"),
-        "动力电池差": calc_component_diff(base_wc, compare_wc, "battery_system_weight"),
-        "智能化配置差": calc_component_diff(base_wc, compare_wc, "intelligent_config_weight"),
-        "车身底盘强化差": calc_component_diff(base_wc, compare_wc, "body_chassis_reinforce_weight"),
-        "隔音舒适件差": calc_component_diff(base_wc, compare_wc, "sound_insulation_weight"),
-        "悬挂制动差": calc_component_diff(base_wc, compare_wc, "suspension_brake_weight"),
-        "内饰舒适差": calc_component_diff(base_wc, compare_wc, "interior_comfort_weight"),
-        "其他差": calc_component_diff(base_wc, compare_wc, "other_weight"),
+        "动力系统差异": calc_component_diff(base_wc, compare_wc, "powertrain_weight"),
+        "动力电池系统差异": calc_component_diff(base_wc, compare_wc, "battery_system_weight"),
+        "智能化配置差异": calc_component_diff(base_wc, compare_wc, "intelligent_config_weight"),
+        "车身与底盘强化差异": calc_component_diff(base_wc, compare_wc, "body_chassis_reinforce_weight"),
+        "隔音舒适件差异": calc_component_diff(base_wc, compare_wc, "sound_insulation_weight"),
+        "悬挂与制动系统差异": calc_component_diff(base_wc, compare_wc, "suspension_brake_weight"),
+        "内饰舒适性配置差异": calc_component_diff(base_wc, compare_wc, "interior_comfort_weight"),
+        "其他差异": calc_component_diff(base_wc, compare_wc, "other_weight"),
     }
 
 
@@ -207,7 +207,7 @@ def calc_weight_gain_contribution(
         target_weight = getattr(target_wc, key, 0)
         baseline_weight = getattr(baseline_wc, key, 0)
         diff = round(target_weight - baseline_weight, 1)
-        contribution_pct = round(diff / total_weight_diff * 100, 1) if total_weight_diff > 0 else 0
+        contribution_pct = round(diff / total_weight_diff * 100, 1) if total_weight_diff != 0 else 0
         component_diffs.append((
             details["name"],
             diff,
@@ -215,7 +215,7 @@ def calc_weight_gain_contribution(
             details["description"]
         ))
 
-    component_diffs.sort(key=lambda x: x[1], reverse=True)
+    component_diffs.sort(key=lambda x: abs(x[1]), reverse=True)
     return component_diffs
 
 
