@@ -66,14 +66,30 @@ def get_vehicle_list_with_summary(
     return result
 
 
+def _determine_base_is_vehicle1(vehicle1: models.Vehicle, vehicle2: models.Vehicle) -> bool:
+    if vehicle1.power_type == PowerType.FUEL and vehicle2.power_type != PowerType.FUEL:
+        return True
+    if vehicle2.power_type == PowerType.FUEL and vehicle1.power_type != PowerType.FUEL:
+        return False
+    return vehicle1.curb_weight <= vehicle2.curb_weight
+
+
 def _build_comparison_response(
-    base_vehicle: models.Vehicle,
-    compare_vehicle: models.Vehicle,
-    base_wc: models.WeightComponent,
-    compare_wc: models.WeightComponent
+    vehicle1: models.Vehicle,
+    vehicle2: models.Vehicle,
+    vehicle1_wc: models.WeightComponent,
+    vehicle2_wc: models.WeightComponent,
+    base_is_vehicle1: bool = True
 ) -> schemas.VehicleComparisonResponse:
-    vehicle1_item = create_comparison_item(base_vehicle, base_wc, base_vehicle, base_wc, True)
-    vehicle2_item = create_comparison_item(compare_vehicle, compare_wc, base_vehicle, base_wc, False)
+    if base_is_vehicle1:
+        base_vehicle, base_wc = vehicle1, vehicle1_wc
+        compare_vehicle, compare_wc = vehicle2, vehicle2_wc
+    else:
+        base_vehicle, base_wc = vehicle2, vehicle2_wc
+        compare_vehicle, compare_wc = vehicle1, vehicle1_wc
+
+    vehicle1_item = create_comparison_item(vehicle1, vehicle1_wc, base_vehicle, base_wc, base_is_vehicle1)
+    vehicle2_item = create_comparison_item(vehicle2, vehicle2_wc, base_vehicle, base_wc, not base_is_vehicle1)
 
     weight_diff_summary = build_weight_diff_summary(base_wc, compare_wc)
     biggest_diff_item, biggest_diff_value = find_biggest_diff_item(base_wc, compare_wc)
@@ -87,7 +103,7 @@ def _build_comparison_response(
         biggest_diff_item=biggest_diff_item,
         biggest_diff_value=biggest_diff_value,
         comparison_type=comparison_type,
-        base_vehicle_is_vehicle1=True
+        base_vehicle_is_vehicle1=base_is_vehicle1
     )
 
 
@@ -128,9 +144,12 @@ def compare_vehicles_by_ids(
     if not vehicle1.weight_component or not vehicle2.weight_component:
         return None
 
+    base_is_vehicle1 = _determine_base_is_vehicle1(vehicle1, vehicle2)
+
     return _build_comparison_response(
         vehicle1, vehicle2,
-        vehicle1.weight_component, vehicle2.weight_component
+        vehicle1.weight_component, vehicle2.weight_component,
+        base_is_vehicle1=base_is_vehicle1
     )
 
 
@@ -374,17 +393,22 @@ def get_weight_gain_attribution(
     if total_weight_diff > 0:
         analysis_summary = f"{target.brand}{target.model}({target.model_year}年)比{baseline.brand}{baseline.model}({baseline.model_year}年)重{total_weight_diff}kg。主要增重来自{top_contributor}，贡献了{top_contributor_weight}kg（占比{top_contributor_percent}%）。"
 
-        battery_contribution = next((c for c in contributions if c.component == "动力电池系统"), None)
-        intelligent_contribution = next((c for c in contributions if c.component == "智能化配置"), None)
+        other_gains = [c for c in contributions if c.weight_diff > 0 and c.component != top_contributor]
+        if other_gains:
+            gain_desc = "、".join([f"{c.component}增重{c.weight_diff}kg" for c in other_gains[:3]])
+            analysis_summary += f"其他增重项包括{gain_desc}。"
 
-        if battery_contribution and battery_contribution.weight_diff > 0:
-            analysis_summary += f"其中电池系统重{battery_contribution.weight_diff}kg（占{battery_contribution.contribution_percent}%），"
-        if intelligent_contribution and intelligent_contribution.weight_diff > 0:
-            analysis_summary += f"智能化配置重{intelligent_contribution.weight_diff}kg（占{intelligent_contribution.contribution_percent}%），"
-
-        analysis_summary += f"整体定位更高，配置更丰富是增重的核心原因。"
+        analysis_summary += "配置差异是增重的核心原因。"
     elif total_weight_diff < 0:
-        analysis_summary = f"{target.brand}{target.model}({target.model_year}年)比{baseline.brand}{baseline.model}({baseline.model_year}年)轻{abs(total_weight_diff)}kg，轻量化设计做得更好。"
+        abs_diff = abs(total_weight_diff)
+        analysis_summary = f"{target.brand}{target.model}({target.model_year}年)比{baseline.brand}{baseline.model}({baseline.model_year}年)轻{abs_diff}kg。主要减重来自{top_contributor}，减少了{abs(top_contributor_weight)}kg（占比{abs(top_contributor_percent)}%）。"
+
+        other_losses = [c for c in contributions if c.weight_diff < 0 and c.component != top_contributor]
+        if other_losses:
+            loss_desc = "、".join([f"{c.component}减重{abs(c.weight_diff)}kg" for c in other_losses[:3]])
+            analysis_summary += f"其他减重项包括{loss_desc}。"
+
+        analysis_summary += "轻量化设计或配置差异是减重的核心原因。"
     else:
         analysis_summary = f"两款车整备质量相同，但重量分布可能不同。"
 

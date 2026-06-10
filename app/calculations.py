@@ -194,7 +194,14 @@ def find_biggest_diff_item(
         ("其他", calc_component_diff(base_wc, compare_wc, "other_weight")),
     ]
     diff_items.sort(key=lambda x: abs(x[1]), reverse=True)
-    return diff_items[0]
+    name, value = diff_items[0]
+    if value > 0:
+        label = f"{name}（增重）"
+    elif value < 0:
+        label = f"{name}（减重）"
+    else:
+        label = name
+    return label, value
 
 
 def calc_weight_gain_contribution(
@@ -207,7 +214,10 @@ def calc_weight_gain_contribution(
         target_weight = getattr(target_wc, key, 0)
         baseline_weight = getattr(baseline_wc, key, 0)
         diff = round(target_weight - baseline_weight, 1)
-        contribution_pct = round(diff / total_weight_diff * 100, 1) if total_weight_diff > 0 else 0
+        if total_weight_diff != 0:
+            contribution_pct = round(diff / total_weight_diff * 100, 1)
+        else:
+            contribution_pct = 0
         component_diffs.append((
             details["name"],
             diff,
@@ -215,7 +225,10 @@ def calc_weight_gain_contribution(
             details["description"]
         ))
 
-    component_diffs.sort(key=lambda x: x[1], reverse=True)
+    if total_weight_diff >= 0:
+        component_diffs.sort(key=lambda x: x[1], reverse=True)
+    else:
+        component_diffs.sort(key=lambda x: x[1])
     return component_diffs
 
 
