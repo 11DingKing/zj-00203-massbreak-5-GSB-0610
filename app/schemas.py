@@ -157,6 +157,7 @@ class VehicleComparisonResponse(BaseModel):
     biggest_diff_value: float
     comparison_type: str
     base_vehicle_is_vehicle1: bool
+    analysis_summary: str
 
 
 class CategoryStatsItem(BaseModel):

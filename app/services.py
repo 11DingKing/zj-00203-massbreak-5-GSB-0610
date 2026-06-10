@@ -67,18 +67,61 @@ def get_vehicle_list_with_summary(
 
 
 def _build_comparison_response(
-    base_vehicle: models.Vehicle,
-    compare_vehicle: models.Vehicle,
-    base_wc: models.WeightComponent,
-    compare_wc: models.WeightComponent
+    vehicle1: models.Vehicle,
+    vehicle2: models.Vehicle,
+    vehicle1_wc: models.WeightComponent,
+    vehicle2_wc: models.WeightComponent,
+    base_vehicle_is_vehicle1: bool
 ) -> schemas.VehicleComparisonResponse:
-    vehicle1_item = create_comparison_item(base_vehicle, base_wc, base_vehicle, base_wc, True)
-    vehicle2_item = create_comparison_item(compare_vehicle, compare_wc, base_vehicle, base_wc, False)
+    if base_vehicle_is_vehicle1:
+        base_vehicle = vehicle1
+        base_wc = vehicle1_wc
+        compare_vehicle = vehicle2
+        compare_wc = vehicle2_wc
+    else:
+        base_vehicle = vehicle2
+        base_wc = vehicle2_wc
+        compare_vehicle = vehicle1
+        compare_wc = vehicle1_wc
+
+    vehicle1_item = create_comparison_item(vehicle1, vehicle1_wc, base_vehicle, base_wc, not base_vehicle_is_vehicle1)
+    vehicle2_item = create_comparison_item(vehicle2, vehicle2_wc, base_vehicle, base_wc, base_vehicle_is_vehicle1)
 
     weight_diff_summary = build_weight_diff_summary(base_wc, compare_wc)
     biggest_diff_item, biggest_diff_value = find_biggest_diff_item(base_wc, compare_wc)
 
+    total_weight_diff = round(compare_vehicle.curb_weight - base_vehicle.curb_weight, 1)
+
     comparison_type = f"{base_vehicle.power_type.value}_vs_{compare_vehicle.power_type.value}"
+
+    if total_weight_diff > 0:
+        direction = "重"
+        diff_abs = total_weight_diff
+        if biggest_diff_value > 0:
+            analysis_summary = (
+                f"{compare_vehicle.brand}{compare_vehicle.model}比{base_vehicle.brand}{base_vehicle.model}"
+                f"{direction}{diff_abs}kg。主要差异来自{biggest_diff_item}，相差{biggest_diff_value}kg。"
+            )
+        else:
+            analysis_summary = (
+                f"{compare_vehicle.brand}{compare_vehicle.model}比{base_vehicle.brand}{base_vehicle.model}"
+                f"{direction}{diff_abs}kg。"
+            )
+    elif total_weight_diff < 0:
+        direction = "轻"
+        diff_abs = abs(total_weight_diff)
+        if biggest_diff_value < 0:
+            analysis_summary = (
+                f"{compare_vehicle.brand}{compare_vehicle.model}比{base_vehicle.brand}{base_vehicle.model}"
+                f"{direction}{diff_abs}kg。主要差异来自{biggest_diff_item}，相差{abs(biggest_diff_value)}kg。"
+            )
+        else:
+            analysis_summary = (
+                f"{compare_vehicle.brand}{compare_vehicle.model}比{base_vehicle.brand}{base_vehicle.model}"
+                f"{direction}{diff_abs}kg。"
+            )
+    else:
+        analysis_summary = f"两款车整备质量相同，均为{base_vehicle.curb_weight}kg，但重量分布可能不同。"
 
     return schemas.VehicleComparisonResponse(
         vehicle1=vehicle1_item,
@@ -87,7 +130,8 @@ def _build_comparison_response(
         biggest_diff_item=biggest_diff_item,
         biggest_diff_value=biggest_diff_value,
         comparison_type=comparison_type,
-        base_vehicle_is_vehicle1=True
+        base_vehicle_is_vehicle1=base_vehicle_is_vehicle1,
+        analysis_summary=analysis_summary
     )
 
 
@@ -111,7 +155,8 @@ def compare_fuel_ev_by_brand_model(
 
     return _build_comparison_response(
         fuel_vehicle, ev_vehicle,
-        fuel_vehicle.weight_component, ev_vehicle.weight_component
+        fuel_vehicle.weight_component, ev_vehicle.weight_component,
+        base_vehicle_is_vehicle1=True
     )
 
 
@@ -128,9 +173,22 @@ def compare_vehicles_by_ids(
     if not vehicle1.weight_component or not vehicle2.weight_component:
         return None
 
+    v1_is_fuel = vehicle1.power_type == PowerType.FUEL
+    v2_is_fuel = vehicle2.power_type == PowerType.FUEL
+    v1_is_ev = vehicle1.power_type == PowerType.EV
+    v2_is_ev = vehicle2.power_type == PowerType.EV
+
+    if v1_is_fuel and v2_is_ev:
+        base_vehicle_is_vehicle1 = True
+    elif v2_is_fuel and v1_is_ev:
+        base_vehicle_is_vehicle1 = False
+    else:
+        base_vehicle_is_vehicle1 = vehicle1.curb_weight <= vehicle2.curb_weight
+
     return _build_comparison_response(
         vehicle1, vehicle2,
-        vehicle1.weight_component, vehicle2.weight_component
+        vehicle1.weight_component, vehicle2.weight_component,
+        base_vehicle_is_vehicle1=base_vehicle_is_vehicle1
     )
 
 
